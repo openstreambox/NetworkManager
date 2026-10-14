@@ -2355,6 +2355,54 @@ test_nexthop_dump(void)
 /*****************************************************************************/
 
 static void
+test_nexthop_add_invalid(void)
+{
+    const int ifindex    = NMTSTP_ENV1_IFINDEXES[0];
+    const int ifindex_lo = 1;
+    NMPObject obj4;
+    NMPObject obj6;
+
+    nmp_object_stackinit(&obj4, NMP_OBJECT_TYPE_IP4_NEXTHOP, NULL);
+    obj4.ip4_nexthop.id = 500;
+
+    nmp_object_stackinit(&obj6, NMP_OBJECT_TYPE_IP6_NEXTHOP, NULL);
+    obj6.ip6_nexthop.id = 600;
+
+    /* Unknown interface */
+    obj6.ip6_nexthop.ifindex = INT_MAX;
+    g_assert_cmpint(nm_platform_ip_nexthop_add(NM_PLATFORM_GET, NMP_NLM_FLAG_ADD, &obj6, NULL),
+                    ==,
+                    -EINVAL);
+
+    /* Interface down */
+    nmtstp_link_set_updown(NULL, -1, ifindex, FALSE);
+    obj6.ip6_nexthop.ifindex = ifindex;
+    g_assert_cmpint(nm_platform_ip_nexthop_add(NM_PLATFORM_GET, NMP_NLM_FLAG_ADD, &obj6, NULL),
+                    ==,
+                    -ENETDOWN);
+    nmtstp_link_set_updown(NULL, -1, ifindex, TRUE);
+
+    /* Gateway on loopback */
+    nmtstp_link_set_updown(NULL, -1, ifindex_lo, TRUE);
+    obj4.ip4_nexthop.ifindex = ifindex_lo;
+    obj4.ip4_nexthop.gateway = nmtst_inet4_from_string("1.2.3.4");
+    g_assert_cmpint(nm_platform_ip_nexthop_add(NM_PLATFORM_GET, NMP_NLM_FLAG_ADD, &obj4, NULL),
+                    ==,
+                    -ENETUNREACH);
+    obj6.ip6_nexthop.ifindex = ifindex_lo;
+    obj6.ip6_nexthop.gateway = nmtst_inet6_from_string("fe80::99");
+    g_assert_cmpint(nm_platform_ip_nexthop_add(NM_PLATFORM_GET, NMP_NLM_FLAG_ADD, &obj6, NULL),
+                    ==,
+                    -EINVAL);
+    nmtstp_link_set_updown(NULL, -1, ifindex_lo, FALSE);
+
+    g_assert_cmpint(nm_platform_ip_nexthop_get(NM_PLATFORM_GET, 500, NULL), ==, -NME_PL_NOT_FOUND);
+    g_assert_cmpint(nm_platform_ip_nexthop_get(NM_PLATFORM_GET, 600, NULL), ==, -NME_PL_NOT_FOUND);
+}
+
+/*****************************************************************************/
+
+static void
 test_nexthop_add(void)
 {
     const int                 ifindex = NMTSTP_ENV1_IFINDEXES[0];
@@ -2930,9 +2978,10 @@ _nmtstp_setup_tests(void)
 
     if (nmtstp_is_root_test()) {
         add_test_func_with_if2("/route/nexthop/dump", test_nexthop_dump);
-        add_test_func("/route/nexthop/add", test_nexthop_add);
-        add_test_func("/route/nexthop/sync", test_nexthop_sync);
     }
+    add_test_func("/route/nexthop/add-invalid", test_nexthop_add_invalid);
+    add_test_func("/route/nexthop/add", test_nexthop_add);
+    add_test_func("/route/nexthop/sync", test_nexthop_sync);
 
     if (nmtstp_is_root_test()) {
         add_test_func_data_with_if2("/route/test_cache_consistency_routes/1",
