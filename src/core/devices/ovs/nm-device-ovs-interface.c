@@ -177,6 +177,16 @@ check_waiting_for_link(NMDevice *device, const char *from)
     return priv->wait_link.waiting;
 }
 
+static gboolean
+keep_admin_down(NMDevice *device)
+{
+    NMSettingOvsInterface *s_ovs_iface;
+
+    s_ovs_iface = nm_device_get_applied_setting(device, NM_TYPE_SETTING_OVS_INTERFACE);
+
+    return s_ovs_iface && nm_streq0(nm_setting_ovs_interface_get_admin_state(s_ovs_iface), "down");
+}
+
 static void
 link_changed(NMDevice *device, const NMPlatformLink *pllink)
 {
@@ -195,7 +205,8 @@ link_changed(NMDevice *device, const NMPlatformLink *pllink)
     _LOGT(LOGD_CORE, "ovs-wait-link: link is ready after link changed event");
 
     nm_device_link_properties_set(device, FALSE);
-    nm_device_bring_up(device);
+    if (!keep_admin_down(device))
+        nm_device_bring_up(device);
 
     nm_device_devip_set_state(device, AF_INET, NM_DEVICE_IP_STATE_PENDING, NULL);
     nm_device_devip_set_state(device, AF_INET6, NM_DEVICE_IP_STATE_PENDING, NULL);
@@ -285,7 +296,8 @@ _netdev_tun_link_cb_in_idle(gpointer user_data)
 
     _LOGT(LOGD_CORE, "ovs-wait-link: tun link is ready");
     nm_device_link_properties_set(device, FALSE);
-    nm_device_bring_up(device);
+    if (!keep_admin_down(device))
+        nm_device_bring_up(device);
 
     nm_device_devip_set_state(device, AF_INET, NM_DEVICE_IP_STATE_PENDING, NULL);
     nm_device_devip_set_state(device, AF_INET6, NM_DEVICE_IP_STATE_PENDING, NULL);
@@ -446,7 +458,8 @@ act_stage3_ip_config(NMDevice *device, int addr_family)
      * IP configuration without the needed allocated resources like DHCP client.
      */
     if (old_wait_link) {
-        nm_device_bring_up(device);
+        if (!keep_admin_down(device))
+            nm_device_bring_up(device);
         nm_device_activate_schedule_stage3_ip_config(device, TRUE);
         return;
     }
@@ -461,16 +474,6 @@ static gboolean
 can_unmanaged_external_down(NMDevice *self)
 {
     return FALSE;
-}
-
-static gboolean
-keep_admin_down(NMDevice *device)
-{
-    NMSettingOvsInterface *s_ovs_iface;
-
-    s_ovs_iface = nm_device_get_applied_setting(device, NM_TYPE_SETTING_OVS_INTERFACE);
-
-    return s_ovs_iface && nm_streq0(nm_setting_ovs_interface_get_admin_state(s_ovs_iface), "down");
 }
 
 static void
