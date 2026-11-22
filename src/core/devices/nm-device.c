@@ -7914,10 +7914,16 @@ device_link_changed(gpointer user_data)
             && !nm_device_managed_type_is_external(self))
             nm_device_l3cfg_commit(self, NM_L3_CFG_COMMIT_TYPE_REAPPLY, FALSE);
     }
-    if (priv->carrier && (!carrier_was_up || carrier_seen_down)) {
+    if (priv->carrier && (!carrier_was_up || carrier_seen_down)
+        && nm_device_get_device_type(self) != NM_DEVICE_TYPE_WIFI) {
         /* If the device is active without a carrier (probably because it is
          * tagged for carrier ignore) ensure that when the carrier appears we
          * renew DHCP leases and such.
+         *
+         * Not for Wi-Fi: a roam or a reconnect toggles the carrier too, and
+         * NMDeviceWifi renews the dynamic IP configuration itself once the
+         * supplicant reports the new association. Doing it here as well
+         * restarts DHCP twice for one roam.
          */
         nm_device_update_dynamic_ip_setup(self, "interface got carrier");
     }
